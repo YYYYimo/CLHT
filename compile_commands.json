@@ -1,0 +1,111 @@
+[
+    {
+        "arguments": [
+            "gcc",
+            "-c",
+            "-DLOCKFREE_RES",
+            "-D_GNU_SOURCE",
+            "-O3",
+            "-DADD_PADDING",
+            "-DDEFAULT",
+            "-Wall",
+            "-I./include",
+            "-I./external/include",
+            "-o",
+            "clht_lf_res",
+            "bmarks/test_mem.c"
+        ],
+        "directory": "/home/yinzijun/CLHT",
+        "file": "bmarks/test_mem.c"
+    },
+    {
+        "arguments": [
+            "gcc",
+            "-c",
+            "-D_GNU_SOURCE",
+            "-O3",
+            "-DADD_PADDING",
+            "-DDEFAULT",
+            "-Wall",
+            "-I./include",
+            "-I./external/include",
+            "-o",
+            "clht_gc.o",
+            "src/clht_gc.c"
+        ],
+        "directory": "/home/yinzijun/CLHT",
+        "file": "src/clht_gc.c"
+    },
+    {
+        "arguments": [
+            "gcc",
+            "-c",
+            "-D_GNU_SOURCE",
+            "-O3",
+            "-DADD_PADDING",
+            "-DDEFAULT",
+            "-Wall",
+            "-I./include",
+            "-I./external/include",
+            "-o",
+            "clht_lf_res.o",
+            "src/clht_lf_res.c"
+        ],
+        "directory": "/home/yinzijun/CLHT",
+        "file": "src/clht_lf_res.c"
+    },
+    {
+        "arguments": [
+            "gcc",
+            "-c",
+            "-I./include",
+            "-I./external/include",
+            "-D_GNU_SOURCE",
+            "-O3",
+            "-DADD_PADDING",
+            "-DDEFAULT",
+            "-Wall",
+            "-o",
+            "clht_lb_res",
+            "src/clht_lb_res.c"
+        ],
+        "directory": "/home/yinzijun/CLHT",
+        "file": "src/clht_lb_res.c"
+    },
+    {
+        "arguments": [
+            "gcc",
+            "-c",
+            "-D_GNU_SOURCE",
+            "-O3",
+            "-DADD_PADDING",
+            "-DDEFAULT",
+            "-Wall",
+            "-I./include",
+            "-I./external/include",
+            "-o",
+            "clht_lb_res.o",
+            "src/clht_lb_res.c"
+        ],
+        "directory": "/home/yinzijun/CLHT",
+        "file": "src/clht_lb_res.c"
+    },
+    {
+        "arguments": [
+            "gcc",
+            "-c",
+            "-I./include",
+            "-I./external/include",
+            "-D_GNU_SOURCE",
+            "-O3",
+            "-DADD_PADDING",
+            "-DDEFAULT",
+            "-Wall",
+            "-o",
+            "clht_lb_res",
+            "bmarks/test_mem.c"
+        ],
+        "directory": "/home/yinzijun/CLHT",
+        "file": "bmarks/test_mem.c"
+    }
+]

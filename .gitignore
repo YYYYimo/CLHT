@@ -167,3 +167,5 @@
 /top.sh
 /top.sh~
 /ttas.o
+/.clangd
+.clang-format

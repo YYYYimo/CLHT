@@ -193,6 +193,7 @@ inline clht_addr_t bucket_exists(bucket_t *bucket, clht_addr_t key) {
     uint32_t j;
     do {
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
+            force_read_from_mem((void*)&bucket->key[j]);
             if (bucket->key[j] == key) {
                 return true;
             }
@@ -329,9 +330,9 @@ static uint32_t clht_put_seq(clht_hashtable_t *hashtable, clht_addr_t key,
 }
 
 static inline void bucket_cpy(bucket_t *bucket, clht_hashtable_t *ht_new) {
-    LOCK_ACQ(&bucket->lock);
-    uint32_t j;
     do {
+        LOCK_ACQ(&bucket->lock);
+        uint32_t j;
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
             clht_addr_t key = bucket->key[j];
             if (key != 0) {
@@ -340,6 +341,7 @@ static inline void bucket_cpy(bucket_t *bucket, clht_hashtable_t *ht_new) {
                 clht_put_seq(ht_new, key, val, bin);
             }
         }
+        LOCK_RLS(&bucket->lock);
         bucket = bucket->next;
     } while (bucket != NULL);
 }
@@ -361,6 +363,7 @@ size_t clht_size(clht_hashtable_t *hashtable) {
         uint32_t j;
         do {
             for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
+                force_read_from_mem((void*)&bucket->key[j]);
                 if (bucket->key[j] > 0) {
                     size++;
                 }

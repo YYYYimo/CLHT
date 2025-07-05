@@ -2,7 +2,7 @@
 # Architecture dependent settings
 #################################
 
-CFLAGS = -D_GNU_SOURCE
+CFLAGS = -D_GNU_SOURCE -march=native
 
 ifeq ($(DEBUG),1)
   DEBUG_FLAGS=-Wall -ggdb -g -DDEBUG
@@ -152,7 +152,7 @@ CFLAGS += $(OPTIMIZE)
 CFLAGS += $(DEBUG_FLAGS)
 
 INCLUDES := -I$(MAININCLUDE) -I$(TOP)/external/include
-OBJ_FILES := clht_gc.o
+OBJ_FILES := clht_gc.o cxl_alloc.o
 
 SRC := src
 

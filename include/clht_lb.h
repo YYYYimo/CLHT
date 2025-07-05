@@ -31,11 +31,13 @@
 #ifndef _CLHT_LB_H_
 #define _CLHT_LB_H_
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include "atomic_ops.h"
 #include "utils.h"
+#include "cxl_alloc.h"
 
 #include "ssmem.h"
 
@@ -51,7 +53,7 @@
 #endif
 
 #define CACHE_LINE_SIZE 64
-#define ENTRIES_PER_BUCKET 3
+#define ENTRIES_PER_BUCKET 2
 
 #ifndef ALIGNED
 #  if __GNUC__ && !SCC
@@ -95,9 +97,12 @@ typedef uint64_t clht_lock_t;
 typedef struct ALIGNED(CACHE_LINE_SIZE) bucket_s
 {
   clht_lock_t lock;
+  uint16_t bitmap;
+  uint8_t padding1[6];
   clht_addr_t key[ENTRIES_PER_BUCKET];
   clht_val_t  val[ENTRIES_PER_BUCKET];
   struct bucket_s* next;
+  uint8_t padding2[8];
 } bucket_t;
 
 typedef struct ALIGNED(CACHE_LINE_SIZE) clht

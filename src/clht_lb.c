@@ -32,6 +32,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "clht_lb.h"
@@ -131,7 +132,7 @@ clht_hashtable_t *clht_hashtable_create(uint64_t num_buckets) {
     hashtable->table =
         (bucket_t *)cxl_alloc(num_buckets * sizeof(bucket_t), CACHE_LINE_SIZE);
     hashtable->bitmap = 
-        (uint16_t *)cxl_alloc(num_buckets * sizeof(uint16_t), CACHE_LINE_SIZE);
+        (bitmap_t *)cxl_alloc(num_buckets * sizeof(bitmap_t), CACHE_LINE_SIZE);
     if (hashtable->table == NULL) {
         printf("** alloc: hashtable->table\n");
         fflush(stdout);
@@ -225,16 +226,17 @@ int clht_put(clht_t *h, clht_addr_t key, clht_val_t val) {
         return false;
     }
 #endif
+    clht_lock_t* lock = &bucket->lock;
     clht_addr_t *empty = NULL;
     clht_val_t *empty_v = NULL;
 
     uint32_t j;
-
+    LOCK_ACQ(lock);
     do {
-        LOCK_ACQ(&bucket->lock);
+        
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
             if (bucket->key[j] == key) {
-                LOCK_RLS(&bucket->lock);
+                LOCK_RLS(lock);
                 return false;
             } else if (empty == NULL && bucket->key[j] == 0) {
                 empty = &bucket->key[j];
@@ -262,7 +264,7 @@ int clht_put(clht_t *h, clht_addr_t key, clht_val_t val) {
             set_bit(&hashtable->bitmap[bin], thread_id);
             force_write_to_mem((void*)bucket);
             force_write_to_mem((void*)&hashtable->bitmap[bin]);
-            LOCK_RLS(&bucket->lock);
+            LOCK_RLS(lock);
             return true;
         }
 
@@ -346,9 +348,9 @@ static uint32_t clht_put_seq(clht_hashtable_t *hashtable, clht_addr_t key,
 }
 
 static inline void bucket_cpy(bucket_t *bucket, clht_hashtable_t *ht_new) {
+    LOCK_ACQ(&bucket->lock);
     uint32_t j;
     do {
-        LOCK_ACQ(&bucket->lock);
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
             clht_addr_t key = bucket->key[j];
             if (key != 0) {
@@ -357,9 +359,9 @@ static inline void bucket_cpy(bucket_t *bucket, clht_hashtable_t *ht_new) {
                 clht_put_seq(ht_new, key, val, bin);
             }
         }
-        LOCK_RLS(&bucket->lock);
         bucket = bucket->next;
     } while (bucket != NULL);
+    LOCK_RLS(&bucket->lock);
 }
 
 void clht_destroy(clht_hashtable_t *hashtable) {

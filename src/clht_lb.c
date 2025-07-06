@@ -28,14 +28,16 @@
  *SOFTWARE.
  *
  */
-
 #include <malloc.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "clht_lb.h"
 #include "cxl_alloc.h"
+#include "SWcc.h"
+#include "clht_thread_local.h"
 
 __thread ssmem_allocator_t *clht_alloc;
 
@@ -128,6 +130,8 @@ clht_hashtable_t *clht_hashtable_create(uint64_t num_buckets) {
     // (sizeof(bucket_t)));
     hashtable->table =
         (bucket_t *)cxl_alloc(num_buckets * sizeof(bucket_t), CACHE_LINE_SIZE);
+    hashtable->bitmap = 
+        (uint16_t *)cxl_alloc(num_buckets * sizeof(uint16_t), CACHE_LINE_SIZE);
     if (hashtable->table == NULL) {
         printf("** alloc: hashtable->table\n");
         fflush(stdout);
@@ -136,10 +140,12 @@ clht_hashtable_t *clht_hashtable_create(uint64_t num_buckets) {
     }
 
     memset(hashtable->table, 0, num_buckets * (sizeof(bucket_t)));
+    memset(hashtable->bitmap, 0, num_buckets * sizeof(uint16_t));
 
     uint64_t i;
     for (i = 0; i < num_buckets; i++) {
         hashtable->table[i].lock = 0;
+        hashtable->bitmap[i] = 0;
         uint32_t j;
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
             hashtable->table[i].key[j] = 0;
@@ -165,22 +171,26 @@ clht_val_t clht_get(clht_hashtable_t *hashtable, clht_addr_t key) {
     size_t bin = clht_hash(hashtable, key);
     volatile bucket_t *bucket = hashtable->table + bin;
 
+    force_read_from_mem((void*)&hashtable->bitmap[bin]);
+    bool should_flush = !is_bit_set(&hashtable->bitmap[bin], thread_id);
+    volatile bucket_t* cur = bucket;
+    if (should_flush) {
+        while (cur != NULL) {
+            force_read_from_mem((void*)cur);
+            cur = cur->next;
+        }
+        set_bit(&hashtable->bitmap[bin], thread_id);
+    }
+
     uint32_t j;
     do {
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-            force_read_from_mem((void *)&bucket->val[j]);
             clht_val_t val = bucket->val[j];
 #ifdef __tile__
             _mm_lfence();
 #endif
-            force_read_from_mem((void *)&bucket->key[j]);
             if (bucket->key[j] == key) {
-				force_read_from_mem((void *)&bucket->val[j]);
-                if (bucket->val[j] == val) {
-                    return val;
-                } else {
-                    return 0;
-                }
+                return val;
             }
         }
 
@@ -190,10 +200,10 @@ clht_val_t clht_get(clht_hashtable_t *hashtable, clht_addr_t key) {
 }
 
 inline clht_addr_t bucket_exists(bucket_t *bucket, clht_addr_t key) {
+    force_read_from_mem((void*)bucket);
     uint32_t j;
     do {
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-            force_read_from_mem((void*)&bucket->key[j]);
             if (bucket->key[j] == key) {
                 return true;
             }
@@ -215,18 +225,16 @@ int clht_put(clht_t *h, clht_addr_t key, clht_val_t val) {
         return false;
     }
 #endif
-    clht_lock_t *lock = &bucket->lock;
-
     clht_addr_t *empty = NULL;
     clht_val_t *empty_v = NULL;
 
     uint32_t j;
 
-    LOCK_ACQ(lock);
     do {
+        LOCK_ACQ(&bucket->lock);
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
             if (bucket->key[j] == key) {
-                LOCK_RLS(lock);
+                LOCK_RLS(&bucket->lock);
                 return false;
             } else if (empty == NULL && bucket->key[j] == 0) {
                 empty = &bucket->key[j];
@@ -239,23 +247,22 @@ int clht_put(clht_t *h, clht_addr_t key, clht_val_t val) {
                 DPP(put_num_failed_expand);
                 bucket->next = clht_bucket_create();
                 bucket->next->key[0] = key;
-				force_write_to_mem((void*)&bucket->next->key[0]); 
 #ifdef __tile__
                 _mm_sfence();
 #endif
                 bucket->next->val[0] = val;
-				force_write_to_mem((void*)&bucket->next->val[0]); 
             } else {
                 *empty_v = val;
-				force_write_to_mem((void*)empty_v);
 #ifdef __tile__
                 _mm_sfence();
 #endif
                 *empty = key;
-				force_write_to_mem((void*)empty);
             }
-
-            LOCK_RLS(lock);
+            clear_all_bits(&hashtable->bitmap[bin]);
+            set_bit(&hashtable->bitmap[bin], thread_id);
+            force_write_to_mem((void*)bucket);
+            force_write_to_mem((void*)&hashtable->bitmap[bin]);
+            LOCK_RLS(&bucket->lock);
             return true;
         }
 
@@ -284,7 +291,10 @@ clht_val_t clht_remove(clht_t *h, clht_addr_t key) {
             if (bucket->key[j] == key) {
                 clht_val_t val = bucket->val[j];
                 bucket->key[j] = 0;
-				force_write_to_mem((void*)&bucket->key[j]);
+                clear_all_bits(&hashtable->bitmap[bin]);
+                set_bit(&hashtable->bitmap[bin], thread_id);
+                force_write_to_mem((void*)&hashtable->bitmap[bin]);
+				force_write_to_mem((void*)&bucket);
                 LOCK_RLS(lock);
                 return val;
             }
@@ -300,6 +310,11 @@ static uint32_t clht_put_seq(clht_hashtable_t *hashtable, clht_addr_t key,
     bucket_t *bucket = hashtable->table + bin;
     clht_addr_t *empty = NULL;
     clht_val_t *empty_v = NULL;
+
+    clear_all_bits(&hashtable->bitmap[bin]);
+    set_bit(&hashtable->bitmap[bin], thread_id);
+    force_write_to_mem((void*)&hashtable->bitmap[bin]);
+
     uint32_t j;
 
     do {
@@ -324,15 +339,16 @@ static uint32_t clht_put_seq(clht_hashtable_t *hashtable, clht_addr_t key,
             }
             return true;
         }
-
+        
+		force_write_to_mem((void*)&bucket);
         bucket = bucket->next;
     } while (true);
 }
 
 static inline void bucket_cpy(bucket_t *bucket, clht_hashtable_t *ht_new) {
+    uint32_t j;
     do {
         LOCK_ACQ(&bucket->lock);
-        uint32_t j;
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
             clht_addr_t key = bucket->key[j];
             if (key != 0) {
@@ -363,7 +379,7 @@ size_t clht_size(clht_hashtable_t *hashtable) {
         uint32_t j;
         do {
             for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-                force_read_from_mem((void*)&bucket->key[j]);
+                force_read_from_mem((void*)&bucket);
                 if (bucket->key[j] > 0) {
                     size++;
                 }

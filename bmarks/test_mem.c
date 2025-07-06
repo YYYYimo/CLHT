@@ -60,6 +60,9 @@
 
 #include "ssmem.h"
 #include "clht.h"
+// test_mem.c
+__thread int thread_id;
+#include "clht_thread_local.h"
 
 #define MEM_SIZE     8
 #define RW_SSMEM_MEM 0
@@ -168,6 +171,7 @@ test(void* thread)
 {
   thread_data_t* td = (thread_data_t*) thread;
   uint32_t ID = td->id;
+  thread_id = td->id;
   phys_id = the_cores[ID];
   set_cpu(phys_id);
 

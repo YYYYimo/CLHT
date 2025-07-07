@@ -33,6 +33,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <xmmintrin.h>
 
 #include "clht_lb.h"
 #include "cxl_alloc.h"
@@ -167,15 +168,14 @@ clht_val_t clht_get(clht_hashtable_t *hashtable, clht_addr_t key) {
 
     uint32_t j;
     do {
+        force_read_from_mem((void *)&bucket);
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-            force_read_from_mem((void *)&bucket->val[j]);
             clht_val_t val = bucket->val[j];
 #ifdef __tile__
             _mm_lfence();
 #endif
-            force_read_from_mem((void *)&bucket->key[j]);
             if (bucket->key[j] == key) {
-				force_read_from_mem((void *)&bucket->val[j]);
+                force_read_from_mem((void *)&bucket);
                 if (bucket->val[j] == val) {
                     return val;
                 } else {
@@ -192,13 +192,12 @@ clht_val_t clht_get(clht_hashtable_t *hashtable, clht_addr_t key) {
 inline clht_addr_t bucket_exists(bucket_t *bucket, clht_addr_t key) {
     uint32_t j;
     do {
+        force_read_from_mem((void*)&bucket);
         for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-            force_read_from_mem((void*)&bucket->key[j]);
             if (bucket->key[j] == key) {
                 return true;
             }
         }
-
         bucket = bucket->next;
     } while (bucket != NULL);
     return false;
@@ -239,22 +238,20 @@ int clht_put(clht_t *h, clht_addr_t key, clht_val_t val) {
                 DPP(put_num_failed_expand);
                 bucket->next = clht_bucket_create();
                 bucket->next->key[0] = key;
-				force_write_to_mem((void*)&bucket->next->key[0]); 
 #ifdef __tile__
                 _mm_sfence();
 #endif
                 bucket->next->val[0] = val;
-				force_write_to_mem((void*)&bucket->next->val[0]); 
+				force_write_to_mem((void*)&bucket); 
             } else {
                 *empty_v = val;
-				force_write_to_mem((void*)empty_v);
 #ifdef __tile__
                 _mm_sfence();
 #endif
                 *empty = key;
-				force_write_to_mem((void*)empty);
+				force_write_to_mem((void*)&bucket);
             }
-
+            _mm_sfence();
             LOCK_RLS(lock);
             return true;
         }
@@ -284,7 +281,8 @@ clht_val_t clht_remove(clht_t *h, clht_addr_t key) {
             if (bucket->key[j] == key) {
                 clht_val_t val = bucket->val[j];
                 bucket->key[j] = 0;
-				force_write_to_mem((void*)&bucket->key[j]);
+                force_read_from_mem((void*)&bucket);
+                _mm_sfence();
                 LOCK_RLS(lock);
                 return val;
             }
@@ -362,13 +360,12 @@ size_t clht_size(clht_hashtable_t *hashtable) {
 
         uint32_t j;
         do {
+            force_read_from_mem((void*)&bucket);
             for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-                force_read_from_mem((void*)&bucket->key[j]);
                 if (bucket->key[j] > 0) {
                     size++;
                 }
             }
-
             bucket = bucket->next;
         } while (bucket != NULL);
     }

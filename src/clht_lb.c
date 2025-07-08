@@ -34,6 +34,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <xmmintrin.h>
+#include <stdatomic.h>
 
 #include "clht_lb.h"
 #include "cxl_alloc.h"
@@ -180,7 +182,7 @@ clht_val_t clht_get(clht_hashtable_t *hashtable, clht_addr_t key) {
             force_read_from_mem((void*)cur);
             cur = cur->next;
         }
-        set_bit(&hashtable->bitmap[bin], thread_id);
+        atomic_fetch_or((_Atomic bitmap_t*)&hashtable->bitmap[bin], ((bitmap_t)1 << thread_id));
     }
 
     uint32_t j;
@@ -260,10 +262,9 @@ int clht_put(clht_t *h, clht_addr_t key, clht_val_t val) {
 #endif
                 *empty = key;
             }
-            clear_all_bits(&hashtable->bitmap[bin]);
-            set_bit(&hashtable->bitmap[bin], thread_id);
             force_write_to_mem((void*)bucket);
-            force_write_to_mem((void*)&hashtable->bitmap[bin]);
+            _mm_sfence();
+            atomic_store((_Atomic bitmap_t*)&hashtable->bitmap[bin], ((bitmap_t)1 << thread_id));
             LOCK_RLS(lock);
             return true;
         }
@@ -293,10 +294,9 @@ clht_val_t clht_remove(clht_t *h, clht_addr_t key) {
             if (bucket->key[j] == key) {
                 clht_val_t val = bucket->val[j];
                 bucket->key[j] = 0;
-                clear_all_bits(&hashtable->bitmap[bin]);
-                set_bit(&hashtable->bitmap[bin], thread_id);
-                force_write_to_mem((void*)&hashtable->bitmap[bin]);
-				force_write_to_mem((void*)&bucket);
+                force_write_to_mem((void*)bucket);
+                _mm_sfence();
+                atomic_store((_Atomic bitmap_t*)&hashtable->bitmap[bin], ((bitmap_t)1 << thread_id));
                 LOCK_RLS(lock);
                 return val;
             }
@@ -312,10 +312,6 @@ static uint32_t clht_put_seq(clht_hashtable_t *hashtable, clht_addr_t key,
     bucket_t *bucket = hashtable->table + bin;
     clht_addr_t *empty = NULL;
     clht_val_t *empty_v = NULL;
-
-    clear_all_bits(&hashtable->bitmap[bin]);
-    set_bit(&hashtable->bitmap[bin], thread_id);
-    force_write_to_mem((void*)&hashtable->bitmap[bin]);
 
     uint32_t j;
 
@@ -343,6 +339,8 @@ static uint32_t clht_put_seq(clht_hashtable_t *hashtable, clht_addr_t key,
         }
         
 		force_write_to_mem((void*)&bucket);
+        _mm_sfence();
+        atomic_store((_Atomic bitmap_t*)&hashtable->bitmap[bin], ((bitmap_t)1 << thread_id));
         bucket = bucket->next;
     } while (true);
 }
@@ -377,11 +375,10 @@ size_t clht_size(clht_hashtable_t *hashtable) {
     uint64_t bin;
     for (bin = 0; bin < num_buckets; bin++) {
         bucket = hashtable->table + bin;
-
+        force_read_from_mem((void*)&bucket);
         uint32_t j;
         do {
             for (j = 0; j < ENTRIES_PER_BUCKET; j++) {
-                force_read_from_mem((void*)&bucket);
                 if (bucket->key[j] > 0) {
                     size++;
                 }

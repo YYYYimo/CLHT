@@ -6,10 +6,6 @@
 
 typedef uint16_t bitmap_t;
 
-static inline void set_bit(bitmap_t *bitmap, int bit_index) {
-    *bitmap |= ((bitmap_t)1 << bit_index);
-}
-
 static inline void clear_bit(bitmap_t *bitmap, int bit_index) {
     *bitmap &= ~((bitmap_t)1 << bit_index);
 }

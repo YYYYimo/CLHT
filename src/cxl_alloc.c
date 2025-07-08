@@ -26,5 +26,4 @@ void force_read_from_mem(void* ptr) {
 
 void force_write_to_mem(void* ptr) {
     _mm_clwb(ptr);
-    _mm_sfence();
 }

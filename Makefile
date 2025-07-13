@@ -63,7 +63,7 @@ PLATFORM=-DDEFAULT
 GCC=gcc
 PLATFORM_NUMA=0
 OPTIMIZE=
-LIBS += -lrt -lpthread -lm  -lclht -lssmem
+LIBS += -lrt -lpthread -lclht -lssmem -lm
 
 UNAME := $(shell uname -n)
 
@@ -152,7 +152,7 @@ CFLAGS += $(OPTIMIZE)
 CFLAGS += $(DEBUG_FLAGS)
 
 INCLUDES := -I$(MAININCLUDE) -I$(TOP)/external/include
-OBJ_FILES := clht_gc.o cxl_alloc.o
+OBJ_FILES := clht_gc.o cxl_alloc.o zipf.o
 
 SRC := src
 
@@ -264,7 +264,7 @@ lib$(TYPE).a: $(OBJ_FILES) $(OBJ)
 
 TYPE = clht_lb
 $(TYPE): $(MAIN_BMARK) lib$(TYPE).a
-	$(GCC) -DNO_RESIZE $(CFLAGS) $(INCLUDES) $(MAIN_BMARK) -o clht_lb $(LIBS) -lclht
+	$(GCC) -DNO_RESIZE $(CFLAGS) $(INCLUDES) $(MAIN_BMARK) -o clht_lb $(LIBS) -lclht 
 
 TYPE = clht_lb_res
 $(TYPE): $(MAIN_BMARK) lib$(TYPE).a

@@ -56,7 +56,7 @@
 #endif
 
 #define CACHE_LINE_SIZE 64
-#define ENTRIES_PER_BUCKET 2
+#define ENTRIES_PER_BUCKET 3
 
 #ifndef ALIGNED
 #if __GNUC__ && !SCC

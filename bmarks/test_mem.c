@@ -418,7 +418,7 @@ int main(int argc, char **argv) {
     while (1) {
         i = 0;
         c = getopt_long(argc, argv,
-                        "hAf:d:i:n:r:su:m:a:l:p:b:v:f:", long_options, &i);
+                        "hAf:d:i:n:r:su:m:a:l:p:b:v:f:z:", long_options, &i);
 
         if (c == -1)
             break;
